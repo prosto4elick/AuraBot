@@ -1,4 +1,4 @@
-import asyncio
+\import asyncio
 import random
 import os
 from aiohttp import web
@@ -20,6 +20,7 @@ ALLOWED_USERS = get_ids('ALLOWED_USERS')
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 
+# Твой легендарный список фраз
 AURA_QUOTES = [
     "Конечно", "А как иначе", "Черт возьми", "А когда не делали", 
     "Никогда не делали", "Делаем", "На колени", "Возможно", 
@@ -40,14 +41,13 @@ HELP_TEXT = (
     "🔮 <code>Аура вероятность [текст]</code>\n"
     "🎱 <code>Аура да нет [вопрос]</code>\n"
     "💬 <code>Аура фраза</code> — выдать базу\n"
-    "🎯 <code>Аура кто [текст]</code>\n"
     "🍀 <code>Аура удача</code>\n"
     "🎲 <code>Аура кости</code> (или <code>пара</code>)\n"
     "📜 <code>Аура команды</code> — показать это меню\n\n"
-    "<i>Работаю четко. Мед по телу.</i>"
+    "<i>Работаю как раб ради вас</i>"
 )
 
-# --- ВЕБ-СЕРВЕР ---
+# --- ВЕБ-СЕРВЕР (Для UptimeRobot) ---
 async def handle(request):
     return web.Response(text="Aura is alive!")
 
@@ -66,7 +66,6 @@ async def start_uptime_server():
 async def cmd_start(message: types.Message):
     await message.reply(HELP_TEXT)
 
-# НОВАЯ КОМАНДА: Аура команды
 @dp.message(is_allowed_group, is_allowed_user, F.text.lower() == "аура команды")
 async def aura_help_cmd(message: types.Message):
     await message.reply(HELP_TEXT)
@@ -85,19 +84,13 @@ async def aura_probability(message: types.Message):
 
 @dp.message(is_allowed_group, is_allowed_user, F.text.lower().startswith("аура да нет"))
 async def aura_yes_no(message: types.Message):
-    ans = random.choice(["Конечно", "Возможно", "А как иначе", "Точно нет", "Да!", "Нет."])
+    ans = random.choice(AURA_QUOTES) # Теперь отвечает твоими фразами
     await message.reply(f"🎱 Ответ: <b>{ans}</b>")
 
 @dp.message(is_allowed_group, is_allowed_user, F.text.lower().startswith("аура фраза"))
 async def aura_random_quote(message: types.Message):
     quote = random.choice(AURA_QUOTES)
     await message.reply(f"💬 <b>{quote}</b>")
-
-@dp.message(is_allowed_group, is_allowed_user, F.text.lower().startswith("аура кто"))
-async def aura_who(message: types.Message):
-    if not ALLOWED_USERS: return
-    user_id = random.choice(ALLOWED_USERS)
-    await message.reply(f"🎯 Я выбираю <a href='tg://user?id={user_id}'>этого человека</a>!")
 
 @dp.message(is_allowed_group, is_allowed_user, F.text.lower().startswith("аура удача"))
 async def aura_luck(message: types.Message):

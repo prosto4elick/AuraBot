@@ -5,6 +5,7 @@ from aiohttp import web
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.filters import CommandStart
 
 # --- НАСТРОЙКИ ---
 TOKEN = os.environ.get('BOT_TOKEN')
@@ -19,7 +20,6 @@ ALLOWED_USERS = get_ids('ALLOWED_USERS')
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 
-# Список твоих легендарных фраз
 AURA_QUOTES = [
     "Конечно", "А как иначе", "Черт возьми", "А когда не делали", 
     "Никогда не делали", "Делаем", "На колени", "Возможно", 
@@ -34,6 +34,19 @@ is_allowed_user = F.from_user.id.in_(ALLOWED_USERS)
 is_allowed_group = F.chat.id.in_(ALLOWED_GROUPS)
 is_private_chat = F.chat.type == "private"
 
+HELP_TEXT = (
+    "✨ <b>Я Аура — ваш легендарный бот!</b> ✨\n\n"
+    "<b>Доступные команды:</b>\n"
+    "🔮 <code>Аура вероятность [текст]</code>\n"
+    "🎱 <code>Аура да нет [вопрос]</code>\n"
+    "💬 <code>Аура фраза</code> — выдать базу\n"
+    "🎯 <code>Аура кто [текст]</code>\n"
+    "🍀 <code>Аура удача</code>\n"
+    "🎲 <code>Аура кости</code> (или <code>пара</code>)\n"
+    "📜 <code>Аура команды</code> — показать это меню\n\n"
+    "<i>Работаю четко. Мед по телу.</i>"
+)
+
 # --- ВЕБ-СЕРВЕР ---
 async def handle(request):
     return web.Response(text="Aura is alive!")
@@ -47,7 +60,24 @@ async def start_uptime_server():
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
 
-# --- КОМАНДЫ ---
+# --- ОБРАБОТЧИКИ ---
+
+@dp.message(CommandStart())
+async def cmd_start(message: types.Message):
+    await message.reply(HELP_TEXT)
+
+# НОВАЯ КОМАНДА: Аура команды
+@dp.message(is_allowed_group, is_allowed_user, F.text.lower() == "аура команды")
+async def aura_help_cmd(message: types.Message):
+    await message.reply(HELP_TEXT)
+
+@dp.message(F.new_chat_members)
+async def welcome_new_member(message: types.Message):
+    for user in message.new_chat_members:
+        if user.id == (await bot.get_me()).id:
+            await message.answer(f"Привет всем! {HELP_TEXT}")
+        else:
+            await message.answer(f"Привет, {user.first_name}! Я Аура. Напиши <b>Аура команды</b>, чтобы узнать, что я могу.")
 
 @dp.message(is_allowed_group, is_allowed_user, F.text.lower().startswith("аура вероятность"))
 async def aura_probability(message: types.Message):
@@ -55,11 +85,9 @@ async def aura_probability(message: types.Message):
 
 @dp.message(is_allowed_group, is_allowed_user, F.text.lower().startswith("аура да нет"))
 async def aura_yes_no(message: types.Message):
-    # Добавил твои фразы в рандом
     ans = random.choice(["Конечно", "Возможно", "А как иначе", "Точно нет", "Да!", "Нет."])
     await message.reply(f"🎱 Ответ: <b>{ans}</b>")
 
-# НОВАЯ КОМАНДА: Аура фраза
 @dp.message(is_allowed_group, is_allowed_user, F.text.lower().startswith("аура фраза"))
 async def aura_random_quote(message: types.Message):
     quote = random.choice(AURA_QUOTES)
@@ -67,6 +95,7 @@ async def aura_random_quote(message: types.Message):
 
 @dp.message(is_allowed_group, is_allowed_user, F.text.lower().startswith("аура кто"))
 async def aura_who(message: types.Message):
+    if not ALLOWED_USERS: return
     user_id = random.choice(ALLOWED_USERS)
     await message.reply(f"🎯 Я выбираю <a href='tg://user?id={user_id}'>этого человека</a>!")
 

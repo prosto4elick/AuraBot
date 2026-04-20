@@ -1,4 +1,4 @@
-\import asyncio
+import asyncio
 import random
 import os
 from aiohttp import web

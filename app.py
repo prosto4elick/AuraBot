@@ -1,6 +1,7 @@
 import asyncio
 import random
 import os
+import time
 from aiohttp import web
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.client.default import DefaultBotProperties
@@ -20,6 +21,10 @@ ALLOWED_USERS = get_ids('ALLOWED_USERS')
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 
+# --- ПАМЯТЬ БОТА ---
+LAST_ANSWERS = {}
+AURA_COOLDOWN = {}
+
 AURA_QUOTES = [
     "Конечно", "А как иначе", "Черт возьми", "А когда не делали", 
     "Никогда не делали", "Делаем", "На колени", "Возможно", 
@@ -29,8 +34,11 @@ AURA_QUOTES = [
     "Я тебе доверяю", "Вам че денег дать", "Че она несет", "Мед по телу"
 ]
 
-# Список конкретных чисел для команды "Аура аура"
-AURA_VALUES = [67, 34, 69, 89, 322, 42, 52, 82, 1488, 228]
+AURA_VALUES = [
+    67, 34, 69, 89, 322, 42, 52, 82, 1488, 228, 
+    "пульсирует синим", "позорище, у тебя нет ауры",
+    "пронырливая", "скудная", "невероятная", "бесконечная"
+]
 
 # --- ФИЛЬТРЫ ---
 is_allowed_user = F.from_user.id.in_(ALLOWED_USERS)
@@ -52,6 +60,17 @@ HELP_TEXT = (
     "📜 <code>Аура команды</code> - показать это меню\n\n"
     "📩 <b>Анонимки:</b> напиши мне в ЛС <code>/msg [текст]</code>.\n\n"
 )
+
+# --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
+
+def check_repeat(chat_id, current_question):
+    """Проверяет, повторяется ли вопрос в течение минуты"""
+    now = time.time()
+    if chat_id in LAST_ANSWERS:
+        last = LAST_ANSWERS[chat_id]
+        if last['text'] == current_question and (now - last['time']) < 60:
+            return last['answer']
+    return None
 
 async def handle(request):
     return web.Response(text="Aura is alive!")
@@ -75,6 +94,65 @@ async def cmd_start(message: types.Message):
 async def aura_help_cmd(message: types.Message):
     await message.reply(HELP_TEXT)
 
+@dp.message(is_allowed_group, is_allowed_user, F.text.lower().startswith("аура вероятность"))
+async def aura_probability(message: types.Message):
+    question = message.text.lower().replace("аура вероятность", "").strip()
+    repeated_answer = check_repeat(message.chat.id, question)
+    if repeated_answer:
+        await message.reply(f"Я же говорю, вероятность: <b>{repeated_answer}</b>")
+    else:
+        res = f"{random.randint(0, 100)}%"
+        LAST_ANSWERS[message.chat.id] = {"text": question, "answer": res, "time": time.time()}
+        await message.reply(f"🔮 Вероятность: <b>{res}</b>")
+
+@dp.message(is_allowed_group, is_allowed_user, F.text.lower().startswith("аура да нет"))
+async def aura_yes_no(message: types.Message):
+    question = message.text.lower().replace("аура да нет", "").strip()
+    repeated_answer = check_repeat(message.chat.id, question)
+    if repeated_answer:
+        await message.reply(f"Я повторяюсь... Ответ: <b>{repeated_answer}</b>")
+    else:
+        ans = random.choice(AURA_QUOTES)
+        LAST_ANSWERS[message.chat.id] = {"text": question, "answer": ans, "time": time.time()}
+        await message.reply(f"🎱 Ответ: <b>{ans}</b>")
+
+@dp.message(is_allowed_group, is_allowed_user, F.text.lower().startswith("аура выбор"))
+async def aura_choice(message: types.Message):
+    content = message.text[10:].lower().strip()
+    if " или " in content:
+        repeated_answer = check_repeat(message.chat.id, content)
+        if repeated_answer:
+            await message.reply(f"Склероз? Я уже выбрала: <b>{repeated_answer}</b>")
+        else:
+            options = content.split(" или ")
+            res = random.choice(options).strip()
+            LAST_ANSWERS[message.chat.id] = {"text": content, "answer": res, "time": time.time()}
+            await message.reply(f"⚖️ Мой выбор: <b>{res}</b>")
+    else:
+        await message.reply("Разделяй варианты словом <b>или</b>")
+
+@dp.message(is_allowed_group, is_allowed_user, F.text.lower().startswith("аура удача"))
+async def aura_luck(message: types.Message):
+    repeated_answer = check_repeat(message.chat.id, "luck_check")
+    if repeated_answer:
+        await message.reply(f"Я уже говорила, твоя удача сегодня: <b>{repeated_answer}</b>")
+    else:
+        luck = f"{random.randint(0, 100)}%"
+        LAST_ANSWERS[message.chat.id] = {"text": "luck_check", "answer": luck, "time": time.time()}
+        await message.reply(f"🍀 Удача сегодня: <b>{luck}</b>")
+
+@dp.message(is_allowed_group, is_allowed_user, F.text.lower() == "аура аура")
+async def aura_instant_value(message: types.Message):
+    uid = message.from_user.id
+    now = time.time()
+    if uid in AURA_COOLDOWN and (now - AURA_COOLDOWN[uid]) < 10:
+        left = int(10 - (now - AURA_COOLDOWN[uid]))
+        await message.reply(f"⏳ Подожди {left} сек. Аура обновляется!")
+        return
+    res = random.choice(AURA_VALUES)
+    AURA_COOLDOWN[uid] = now
+    await message.reply(f"💎 Твоя аура в данный момент: <b>{res}</b>")
+
 @dp.message(is_allowed_group, is_allowed_user, F.text.lower().startswith("аура число"))
 async def aura_random_num(message: types.Message):
     parts = message.text.split()
@@ -97,21 +175,6 @@ async def aura_timer(message: types.Message):
     except:
         await message.reply("Пиши: <code>Аура таймер 10</code>")
 
-@dp.message(is_allowed_group, is_allowed_user, F.text.lower().startswith("аура выбор"))
-async def aura_choice(message: types.Message):
-    content = message.text[10:].lower()
-    if " или " in content:
-        options = content.split(" или ")
-        res = random.choice(options).strip()
-        await message.reply(f"⚖️ Мой выбор: <b>{res}</b>")
-    else:
-        await message.reply("Разделяй варианты словом <b>или</b>")
-
-@dp.message(is_allowed_group, is_allowed_user, F.text.lower() == "аура аура")
-async def aura_instant_value(message: types.Message):
-    res = random.choice(AURA_VALUES)
-    await message.reply(f"💎 Твоя аура в данный момент: <b>{res}</b>")
-
 @dp.message(F.new_chat_members)
 async def welcome_new_member(message: types.Message):
     for user in message.new_chat_members:
@@ -120,24 +183,10 @@ async def welcome_new_member(message: types.Message):
         else:
             await message.answer(f"Привет, {user.first_name}! Я Аура. Напиши <b>Аура команды</b>.")
 
-@dp.message(is_allowed_group, is_allowed_user, F.text.lower().startswith("аура вероятность"))
-async def aura_probability(message: types.Message):
-    await message.reply(f"🔮 Вероятность: <b>{random.randint(0, 100)}%</b>")
-
-@dp.message(is_allowed_group, is_allowed_user, F.text.lower().startswith("аура да нет"))
-async def aura_yes_no(message: types.Message):
-    ans = random.choice(AURA_QUOTES)
-    await message.reply(f"🎱 Ответ: <b>{ans}</b>")
-
 @dp.message(is_allowed_group, is_allowed_user, F.text.lower().startswith("аура фраза"))
 async def aura_random_quote(message: types.Message):
     quote = random.choice(AURA_QUOTES)
     await message.reply(f"💬 <b>{quote}</b>")
-
-@dp.message(is_allowed_group, is_allowed_user, F.text.lower().startswith("аура удача"))
-async def aura_luck(message: types.Message):
-    luck = random.randint(0, 100)
-    await message.reply(f"🍀 Удача сегодня: <b>{luck}%</b>")
 
 @dp.message(is_allowed_group, is_allowed_user, F.text.lower() == "аура кости пара")
 async def aura_dice_pair(message: types.Message):

@@ -29,6 +29,9 @@ AURA_QUOTES = [
     "Я тебе доверяю", "Вам че денег дать", "Че она несет", "Мед по телу"
 ]
 
+# Список конкретных чисел для команды "Аура аура"
+AURA_VALUES = [67, 34, 69, 89, 322, 42, 52, 82, 1488, 228]
+
 # --- ФИЛЬТРЫ ---
 is_allowed_user = F.from_user.id.in_(ALLOWED_USERS)
 is_allowed_group = F.chat.id.in_(ALLOWED_GROUPS)
@@ -42,8 +45,12 @@ HELP_TEXT = (
     "💬 <code>Аура фраза</code> - выдать базу\n"
     "🍀 <code>Аура удача</code>\n"
     "🎲 <code>Аура кости</code> (или <code>пара</code>)\n"
+    "🔢 <code>Аура число [от] [до]</code>\n"
+    "⏳ <code>Аура таймер [сек]</code>\n"
+    "⚖️ <code>Аура выбор [1] или [2]</code>\n"
+    "💎 <code>Аура аура</code> - узнать свою ауру сейчас\n"
     "📜 <code>Аура команды</code> - показать это меню\n\n"
-    "<i>Работаю как раб ради вас. Цените это &lt;3</i>"
+    "📩 <b>Анонимки:</b> напиши мне в ЛС <code>/msg [текст]</code>.\n\n"
 )
 
 async def handle(request):
@@ -64,10 +71,46 @@ async def start_uptime_server():
 async def cmd_start(message: types.Message):
     await message.reply(HELP_TEXT)
 
-# Исправленная команда (теперь ловит и "аура команды", и "Аура команды")
 @dp.message(is_allowed_group, is_allowed_user, F.text.lower().startswith("аура команды"))
 async def aura_help_cmd(message: types.Message):
     await message.reply(HELP_TEXT)
+
+@dp.message(is_allowed_group, is_allowed_user, F.text.lower().startswith("аура число"))
+async def aura_random_num(message: types.Message):
+    parts = message.text.split()
+    try:
+        n1, n2 = int(parts[2]), int(parts[3])
+        res = random.randint(min(n1, n2), max(n1, n2))
+        await message.reply(f"🔢 Случайное число: <b>{res}</b>")
+    except:
+        await message.reply("Пиши: <code>Аура число 1 100</code>")
+
+@dp.message(is_allowed_group, is_allowed_user, F.text.lower().startswith("аура таймер"))
+async def aura_timer(message: types.Message):
+    parts = message.text.split()
+    try:
+        seconds = int(parts[2])
+        if seconds <= 0: raise ValueError
+        await message.reply(f"⏳ Таймер запущен на <b>{seconds}</b> сек.")
+        await asyncio.sleep(seconds)
+        await message.answer(f"🔔 {message.from_user.mention_html()}, <b>время вышло!</b>")
+    except:
+        await message.reply("Пиши: <code>Аура таймер 10</code>")
+
+@dp.message(is_allowed_group, is_allowed_user, F.text.lower().startswith("аура выбор"))
+async def aura_choice(message: types.Message):
+    content = message.text[10:].lower()
+    if " или " in content:
+        options = content.split(" или ")
+        res = random.choice(options).strip()
+        await message.reply(f"⚖️ Мой выбор: <b>{res}</b>")
+    else:
+        await message.reply("Разделяй варианты словом <b>или</b>")
+
+@dp.message(is_allowed_group, is_allowed_user, F.text.lower() == "аура аура")
+async def aura_instant_value(message: types.Message):
+    res = random.choice(AURA_VALUES)
+    await message.reply(f"💎 Твоя аура в данный момент: <b>{res}</b>")
 
 @dp.message(F.new_chat_members)
 async def welcome_new_member(message: types.Message):

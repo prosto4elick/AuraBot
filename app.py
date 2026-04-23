@@ -34,6 +34,12 @@ AURA_QUOTES = [
     "Я тебе доверяю", "Вам че денег дать", "Че она несет", "Мед по телу"
 ]
 
+YES_NO_ANSWERS = [
+    "Я думаю, что ДА", "Скорее всего, ДА", "Конечно, ДА", "Однозначно ДА",
+    "Я думаю, что НЕТ", "Скорее всего, НЕТ", "Точно НЕТ", "Вообще без вариантов, НЕТ",
+    "Спроси позже, я в раздумьях", "Мои сенсоры говорят — ДА", "Звезды нашептали — НЕТ"
+]
+
 AURA_VALUES = [
     67, 34, 69, 89, 322, 42, 52, 82, 1488, 228, 
     "пульсирует синим", "позорище, у тебя нет ауры",
@@ -112,7 +118,7 @@ async def aura_yes_no(message: types.Message):
     if repeated_answer:
         await message.reply(f"Я повторяюсь... Ответ: <b>{repeated_answer}</b>")
     else:
-        ans = random.choice(AURA_QUOTES)
+        ans = random.choice(YES_NO_ANSWERS)
         LAST_ANSWERS[message.chat.id] = {"text": question, "answer": ans, "time": time.time()}
         await message.reply(f"🎱 Ответ: <b>{ans}</b>")
 

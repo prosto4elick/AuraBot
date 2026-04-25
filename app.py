@@ -22,7 +22,6 @@ bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 
 # --- ПАМЯТЬ БОТА ---
-# Теперь храним {chat_id: {question_text: {answer: str, time: float}}}
 LAST_ANSWERS = {}
 AURA_COOLDOWN = {}
 
@@ -41,7 +40,6 @@ YES_NO_ANSWERS = [
     "Спроси позже, я в раздумьях", "Мои сенсоры говорят — ДА", "Звезды нашептали — НЕТ"
 ]
 
-# Варианты ответов при повторе
 REPEAT_PHRASES = [
     "Я повторяюсь... Ответ: ",
     "Склероз? Я уже говорила: ",
@@ -69,19 +67,16 @@ HELP_TEXT = (
     "🎱 <code>Аура да нет [вопрос]</code>\n"
     "💬 <code>Аура фраза</code> - выдать базу\n"
     "🍀 <code>Аура удача</code>\n"
-    "🎲 <code>Аура кости</code> (или <code>пара</code>)\n"
+    "🎲 <code>Аура кости</code>\n"
     "🔢 <code>Аура число [от] [до]</code>\n"
-    "⏳ <code>Аура таймер [сек]</code>\n"
-    "⚖️ <code>Аура выбор [1] или [2]</code>\n"
     "💎 <code>Аура аура</code> - узнать свою ауру сейчас\n"
+    "📢 <code>Аура сбор</code> - призвать своих в этом чате\n"
     "📜 <code>Аура команды</code> - показать это меню\n\n"
-    "📩 <b>Анонимки:</b> напиши мне в ЛС <code>/msg [текст]</code>.\n\n"
 )
 
 # --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
 
 def check_repeat(chat_id, question):
-    """Проверяет, был ли такой вопрос в этом чате за последние 60 сек"""
     now = time.time()
     if chat_id in LAST_ANSWERS:
         chat_history = LAST_ANSWERS[chat_id]
@@ -92,7 +87,6 @@ def check_repeat(chat_id, question):
     return None
 
 def save_answer(chat_id, question, answer):
-    """Сохраняет ответ в историю чата"""
     now = time.time()
     if chat_id not in LAST_ANSWERS:
         LAST_ANSWERS[chat_id] = {}
@@ -115,6 +109,24 @@ async def start_uptime_server():
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
     await message.reply(HELP_TEXT)
+
+@dp.message(is_allowed_group, is_allowed_user, F.text.lower().startswith("аура сбор"))
+async def aura_call_all(message: types.Message):
+    mentions = ""
+    for uid in ALLOWED_USERS:
+        try:
+            # Проверяем статус пользователя в текущем чате
+            member = await message.bot.get_chat_member(message.chat.id, uid)
+            if member.status not in ["left", "kicked"]:
+                # Добавляем скрытое упоминание (невидимый символ)
+                mentions += f'<a href="tg://user?id={uid}">\u2063</a>'
+        except:
+            continue
+    
+    if mentions:
+        await message.answer(f"📢 <b>Общий сбор легенд в этом чате!</b>{mentions}")
+    else:
+        await message.reply("Никого из списка доступа в этом чате не найдено.")
 
 @dp.message(is_allowed_group, is_allowed_user, F.text.lower().startswith("аура команды"))
 async def aura_help_cmd(message: types.Message):

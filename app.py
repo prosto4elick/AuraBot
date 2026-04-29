@@ -33,7 +33,18 @@ AURA_VALUES = [
     67, 34, 69, 89, 322, 42, 52, 82, 1488, 228, 
     "пульсирует синим", "позорище, у тебя нет ауры", "пронырливая", "скудная", "невероятная", "бесконечная",
     "получил(а) много ауры незаконным путем", "грязная", "чистая", "выронил ауру", "украл чужую ауру", 
-    "пожертвовал свою ауру нуждающимся", "взял микрозайм на ауру"
+    "пожертвовал свою ауру нуждающимся", "взял микрозайм на ауру", "отбывает срок за кражу ауры"
+]
+
+# Эксклюзивные варианты для самого бота
+SELF_AURA_VALUES = [
+    "Абсолютная", 
+    "Ослепительная. Не смотри на меня", 
+    "Бесконечная конечно", 
+    "Выиграла вашу ауру в казино", 
+    "Живу на проценты с вашей ауры", 
+    "Отмыла всю грязную ауру", 
+    "Пожертвовала ауру нуждающимся"
 ]
 
 WELCOME_VARIATIONS = [
@@ -198,6 +209,9 @@ async def main_group_handler(message: types.Message):
                     await message.reply(f"⏳ Подожди {int(10-(now-AURA_COOLDOWN[uid]))} сек."); return
                 res = random.choice(AURA_VALUES); AURA_COOLDOWN[uid] = now
                 await message.reply(f"💎 Твоя аура: <b>{res}</b>")
+            elif target.lower() in ["@aurabotn_bot", "ауры", "аура", "aura"]:
+                res = random.choice(SELF_AURA_VALUES)
+                await message.reply(f"💎 Моя аура: <b>{res}</b>")
             else:
                 res = random.choice(AURA_VALUES)
                 await message.reply(f"💎 Аура <b>{target}</b>: <b>{res}</b>")

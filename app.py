@@ -523,7 +523,7 @@ async def main_group_handler(message: types.Message):
             top_list.sort(key=lambda x: x[1], reverse=True)
             report = "🏆 <b>Топ богачей Ауры:</b>\n\n"
             for i, (name, bal, u_id) in enumerate(top_list[:10], 1):
-                link = f'<a href="https://t.me/user?id={u_id}">{name}</a>'
+                link = f'<a href="tg://user?id={u_id}">{name}</a>'
                 report += f"{i}. {link} — <b>{bal}</b> 💎\n"
             await message.answer(report)
 
@@ -709,7 +709,7 @@ async def main_group_handler(message: types.Message):
 
         elif msg_text in ["аура гс", "аура поясни", "аура чё там"]:
             target_msg = message.reply_to_message
-            if not target_msg or not (target_msg.voice or target_note):
+            if not target_msg or not (target_msg.voice or target_msg.video_note):
                 await message.reply("Чтобы я расшифровала, ответь этой командой на ГС или кружок! 🎧🎬")
                 return
 
@@ -758,7 +758,7 @@ async def main_group_handler(message: types.Message):
             stats.sort(key=lambda x: x[1], reverse=True)
             report = f"📊 <b>Статистика ({period_name}):</b>\n"
             for i, (name, cnt, u_id, bal) in enumerate(stats[:10], 1):
-                link = f'<a href="https://t.me/user?id={u_id}">{name}</a>'
+                link = f'<a href="tg://user?id={u_id}">{name}</a>'
                 status_short = get_status(bal).split(' (')[0]
                 report += f"{i}. {link} — <b>{cnt}</b> [{status_short}]\n"
             await message.answer(report)

@@ -56,13 +56,14 @@ def get_gsheet():
 def load_stats():
     try:
         sheet = get_gsheet()
-        if not sheet: return {}
+        if not sheet: return {}, {}
         
         records = sheet.get_all_records()
         if not records:
-            return {}
+            return {}, {}
             
         stats = {}
+        settings = {}
         for row in records:
             if not row.get('user_id'): continue
             
@@ -73,25 +74,36 @@ def load_stats():
                 "last_farm": float(row.get('last_farm', 0)),
                 "times": json.loads(row['times']) if row.get('times') else []
             }
-        return stats
+            
+            # Загружаем настройки уведомлений (если колонки нет или она пустая — по умолчанию True)
+            notify_val = row.get('notify', 'True')
+            if notify_val in [True, 'True', '1', 1]:
+                settings[uid] = {"notify": True}
+            else:
+                settings[uid] = {"notify": False}
+                
+        return stats, settings
     except Exception as e:
         print(f"!!! ОШИБКА ЗАГРУЗКИ: {e}")
-        return {}
+        return {}, {}
 
-def save_stats(stats_data):
+def save_stats(stats_data, settings_data):
     try:
         sheet = get_gsheet()
         if not sheet: return
         
-        rows = [["user_id", "name", "balance", "last_farm", "times"]]
+        rows = [["user_id", "name", "balance", "last_farm", "times", "notify"]]
         
         for uid, data in stats_data.items():
+            # Получаем статус уведомлений для текущего пользователя из словаря настроек
+            is_notify = settings_data.get(uid, {}).get("notify", True)
             rows.append([
                 str(uid), 
                 str(data['name']), 
                 int(data['balance']), 
                 float(data['last_farm']), 
-                json.dumps(data['times'])
+                json.dumps(data['times']),
+                str(is_notify)
             ])
         
         sheet.clear()
@@ -116,7 +128,7 @@ AURA_COOLDOWN = {}
 RISK_COOLDOWN = {} 
 USER_JOINS_TODAY = {} 
 MAT_COUNTERS = {}  # ИНДИВИДУАЛЬНАЯ ПАМЯТЬ ДЛЯ НАКОПЛЕНИЯ МАТОВ
-USER_MESSAGES = load_stats()
+USER_MESSAGES, USER_SETTINGS = load_stats() # Загружаем сразу обе структуры данных из таблицы
 
 AURA_QUOTES = ["Конечно", "А как иначе", "Черт возьми", "А когда не делали", "Делаем", "На колени", "Возможно", "Это победа", "Легенда", "Внатуре", "Это реально круто", "Естественно", "Че они там курят", "Потихоньку", "Дай Бог", "Я это запомню", "Я это не запомню", "Я не мафия", "Я мафия", "Я тебе доверяю", "Вам че денег дать", "Че она несет", "Мед по телу"]
 YES_NO_ANSWERS = ["Я думаю, что ДА", "Скорее всего, ДА", "Конечно, ДА", "Однозначно ДА", "Я думаю, что НЕТ", "Скорее всего, НЕТ", "Точно НЕТ", "Вообще без вариантов, НЕТ", "Спроси позже, я в раздумьях", "Мои сенсоры говорят - ДА", "Звезды нашептали - НЕТ"]
@@ -349,6 +361,29 @@ async def cb_transcribe_voice(callback: types.CallbackQuery):
         if os.path.exists(ogg_p): os.remove(ogg_p)
         if os.path.exists(wav_p): os.remove(wav_p)
 
+@dp.callback_query(F.data.startswith("toggle_notify_"))
+async def cb_toggle_notify(callback: types.CallbackQuery):
+    u_id = str(callback.from_user.id)
+    if u_id not in USER_SETTINGS:
+        USER_SETTINGS[u_id] = {"notify": True}
+    
+    current_status = USER_SETTINGS[u_id].get("notify", True)
+    new_status = not current_status
+    USER_SETTINGS[u_id]["notify"] = new_status
+    
+    status_text = "🔔 Включены" if new_status else "🔕 Отключены"
+    btn_text = "🔕 Отключить уведомления" if new_status else "🔔 Включить уведомления"
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=btn_text, callback_data=f"toggle_notify_{u_id}")]])
+    
+    await callback.message.edit_text(
+        f"⚙️ <b>Настройки уведомлений изменена!</b>\n\nТекущий статус: <b>{status_text}</b>\nПри переводах вам будет приходить/не приходить отчет в ЛС.",
+        reply_markup=kb
+    )
+    await callback.answer(f"Уведомления {'включены' if new_status else 'отключены'}")
+    # Сохраняем новые настройки в таблицу сразу после переключения
+    asyncio.create_task(asyncio.to_thread(save_stats, USER_MESSAGES, USER_SETTINGS))
+
 @dp.message(F.new_chat_members)
 async def welcome_new_member(message: types.Message):
     today = time.strftime("%Y-%m-%d")
@@ -389,8 +424,19 @@ async def video_note_hint_handler(message: types.Message):
         kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🎬 Расшифровать", callback_data="transcribe_voice")]])
         await message.reply(random.choice(VIDEO_OFFER_TEXTS), reply_markup=kb)
 
-@dp.message(is_allowed_group, F.text)
+@dp.message(F.text)
 async def main_group_handler(message: types.Message):
+    # Проверка на белый список пользователей
+    if message.from_user.id not in ALLOWED_USERS:
+        return
+
+    # Проверяем, откуда пришло сообщение: это разрешенная группа или ЛС бота?
+    is_group = message.chat.id in ALLOWED_GROUPS
+    is_private = message.chat.type == "private"
+
+    if not is_group and not is_private:
+        return
+
     msg_text = message.text.lower()
     uid = str(message.from_user.id)
     uname = message.from_user.first_name
@@ -408,7 +454,7 @@ async def main_group_handler(message: types.Message):
     bad_pattern = r"(?i)\b(?:а|о|вы|по|на|при|у|ни)?(?:хуй|пизд|ебла|сук|бля|гандон|даун|шлюх|уеб|чмо|хуе|хуя)[а-яё]*"
     matches = re.findall(bad_pattern, msg_text)
     
-    if matches and not msg_text.startswith("аура"):
+    if matches and not msg_text.startswith("аура") and is_group:
         mats_in_msg = len(matches)
         
         if uid not in MAT_COUNTERS:
@@ -435,7 +481,7 @@ async def main_group_handler(message: types.Message):
                 f"Итого штраф в казну Ауры: <b>{actual_fine}</b> 💎"
             )
             await message.reply(response_text)
-            asyncio.create_task(asyncio.to_thread(save_stats, USER_MESSAGES))
+            asyncio.create_task(asyncio.to_thread(save_stats, USER_MESSAGES, USER_SETTINGS))
 
     tt_match = re.search(r'http(?:s)?://(?:www\.)?v(?:t|m)\.tiktok\.com/\S+|http(?:s)?://(?:www\.)?tiktok\.com/\S+', message.text)
     if tt_match and not msg_text.startswith("аура"):
@@ -459,7 +505,7 @@ async def main_group_handler(message: types.Message):
                 u_data["last_farm"] = now
                 status = get_status(u_data["balance"])
                 await message.reply(f"⛏ Ты нафармил <b>{reward}</b> 💎\nТвой баланс: <b>{u_data['balance']}</b>\nТвой статус: <b>{status}</b>")
-                asyncio.create_task(asyncio.to_thread(save_stats, USER_MESSAGES)) 
+                asyncio.create_task(asyncio.to_thread(save_stats, USER_MESSAGES, USER_SETTINGS)) 
 
         elif msg_text == "аура баланс":
             balance = USER_MESSAGES[uid].get("balance", 0)
@@ -483,7 +529,7 @@ async def main_group_handler(message: types.Message):
 
         elif msg_text.startswith("аура перевод"):
             if not message.reply_to_message:
-                await message.reply("Эту команду нужно писать ответом на сообщение того, кому хочешь перевести 💎")
+                await message.reply("Эту команду нужно писать ответом на сообщение того, кому хочешь перевести 💎 (работает только в группе)")
                 return
             try:
                 parts = msg_text.split()
@@ -528,9 +574,26 @@ async def main_group_handler(message: types.Message):
                 f"💰 <b>Дошло до получателя: {final_amount}</b> 💎"
             )
             await message.reply(report_msg)
-            asyncio.create_task(asyncio.to_thread(save_stats, USER_MESSAGES))
+            asyncio.create_task(asyncio.to_thread(save_stats, USER_MESSAGES, USER_SETTINGS))
+
+            # ОТПРАВКА УВЕДОМЛЕНИЯ В ЛС ПОЛУЧАТЕЛЮ
+            is_notify_enabled = USER_SETTINGS.get(recipient_id, {}).get("notify", True)
+            if is_notify_enabled:
+                try:
+                    kb_ls = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔕 Отключить уведомления", callback_data=f"toggle_notify_{recipient_id}")]])
+                    sender_mention = f"<a href='tg://user?id={uid}'>{uname}</a>"
+                    await bot.send_message(
+                        chat_id=int(recipient_id),
+                        text=f"💸 Вам перевели <b>{final_amount}</b> 💎 от пользователя {sender_mention}!",
+                        reply_markup=kb_ls
+                    )
+                except Exception as e:
+                    print(f"Не удалось отправить уведомление в ЛС пользователю {recipient_id}: {e}")
 
         elif msg_text.startswith("аура штраф"):
+            if not is_group:
+                await message.reply("Штрафы работают только внутри групп!")
+                return
             member = await message.bot.get_chat_member(message.chat.id, message.from_user.id)
             if member.status not in ["administrator", "creator"]:
                 await message.reply("Куда мы лезем?")
@@ -571,7 +634,7 @@ async def main_group_handler(message: types.Message):
             else:
                 await message.reply(f" Админ-штраф! С баланса <a href='tg://user?id={t_uid}'>{target_user.first_name}</a> списано <b>{actual_fine}</b> 💎. Деньги ушли в казну.")
             
-            asyncio.create_task(asyncio.to_thread(save_stats, USER_MESSAGES))
+            asyncio.create_task(asyncio.to_thread(save_stats, USER_MESSAGES, USER_SETTINGS))
 
         elif msg_text.startswith("аура ставка"):
             uid_int = int(uid)
@@ -621,7 +684,7 @@ async def main_group_handler(message: types.Message):
             RISK_COOLDOWN[uid_int] = now
             
             await message.reply(f"{res_text}\nИзменение: <b>{'+' if change >= 0 else ''}{change}</b> 💎\nБаланс: <b>{u_data['balance']}</b>")
-            asyncio.create_task(asyncio.to_thread(save_stats, USER_MESSAGES))
+            asyncio.create_task(asyncio.to_thread(save_stats, USER_MESSAGES, USER_SETTINGS))
 
             if is_lose:
                 await asyncio.sleep(1)
@@ -701,6 +764,9 @@ async def main_group_handler(message: types.Message):
             await message.answer(report)
 
         elif "сбор" in msg_text:
+            if not is_group:
+                await message.reply("Команда общий сбор имеет смысл только в группе!")
+                return
             mentions = ""
             for target_id in ALLOWED_USERS:
                 try:
@@ -734,7 +800,7 @@ async def main_group_handler(message: types.Message):
             content = msg_text.replace("аура выбор", "").strip()
             words = content.lower()
             if ("вилк" in words or "глаз" in words) and ("жоп" in words or "раз" in words):
-                await message.reply(random.choice(["Иди нахуй", "Иди нахуй с такими вопросами", "Пошел нахуй", "Еблан сука", "Может нахуй сходишь", "Тебя явно не спрашивали блять"]))
+                await message.reply(random.choice(["Иди нахуй", "Иди нахуй с такими вопросов", "Пошел нахуй", "Еблан сука", "Может нахуй сходишь", "Тебя явно не спрашивали блять"]))
                 return
             if " или " in content:
                 repeated = check_repeat(message.chat.id, content)

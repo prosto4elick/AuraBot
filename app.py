@@ -115,6 +115,7 @@ LAST_ANSWERS = {}
 AURA_COOLDOWN = {}
 RISK_COOLDOWN = {} 
 USER_JOINS_TODAY = {} 
+MAT_COUNTERS = {}  # ИНДИВИДУАЛЬНАЯ ПАМЯТЬ ДЛЯ НАКОПЛЕНИЯ МАТОВ
 USER_MESSAGES = load_stats()
 
 AURA_QUOTES = ["Конечно", "А как иначе", "Черт возьми", "А когда не делали", "Делаем", "На колени", "Возможно", "Это победа", "Легенда", "Внатуре", "Это реально круто", "Естественно", "Че они там курят", "Потихоньку", "Дай Бог", "Я это запомню", "Я это не запомню", "Я не мафия", "Я мафия", "Я тебе доверяю", "Вам че денег дать", "Че она несет", "Мед по телу"]
@@ -408,21 +409,33 @@ async def main_group_handler(message: types.Message):
     matches = re.findall(bad_pattern, msg_text)
     
     if matches and not msg_text.startswith("аура"):
-        count = len(matches)
-        total_fine = count * 5
-        current_bal = USER_MESSAGES[uid].get("balance", 0)
-        actual_fine = min(current_bal, total_fine)
+        mats_in_msg = len(matches)
         
-        USER_MESSAGES[uid]["balance"] -= actual_fine
-        USER_MESSAGES[bot_id]["balance"] += actual_fine
+        if uid not in MAT_COUNTERS:
+            MAT_COUNTERS[uid] = 0
+            
+        MAT_COUNTERS[uid] += mats_in_msg
+        MAT_THRESHOLD = 3 
         
-        shame_phrase = random.choice(SHAME_VARIATIONS)
-        if count > 1:
-            response_text = f"{shame_phrase}\nПосчитала матов: <b>{count}</b> шт.\nИтого в казну: <b>{actual_fine}</b> 💎"
-        else:
-            response_text = f"{shame_phrase}\nВ казну Ауры ушло <b>{actual_fine}</b> 💎"
-        await message.reply(response_text)
-        asyncio.create_task(asyncio.to_thread(save_stats, USER_MESSAGES))
+        if MAT_COUNTERS[uid] >= MAT_THRESHOLD:
+            total_mats = MAT_COUNTERS[uid]
+            total_fine = total_mats * 5
+            current_bal = USER_MESSAGES[uid].get("balance", 0)
+            actual_fine = min(current_bal, total_fine)
+            
+            USER_MESSAGES[uid]["balance"] -= actual_fine
+            USER_MESSAGES[bot_id]["balance"] += actual_fine
+            
+            MAT_COUNTERS[uid] = 0
+            
+            shame_phrase = random.choice(SHAME_VARIATIONS)
+            response_text = (
+                f"{shame_phrase}\n"
+                f"Накопилось матов: <b>{total_mats}</b> шт.\n"
+                f"Итого штраф в казну Ауры: <b>{actual_fine}</b> 💎"
+            )
+            await message.reply(response_text)
+            asyncio.create_task(asyncio.to_thread(save_stats, USER_MESSAGES))
 
     tt_match = re.search(r'http(?:s)?://(?:www\.)?v(?:t|m)\.tiktok\.com/\S+|http(?:s)?://(?:www\.)?tiktok\.com/\S+', message.text)
     if tt_match and not msg_text.startswith("аура"):

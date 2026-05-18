@@ -188,7 +188,7 @@ VOICE_OFFER_TEXTS = [
 ]
 
 VIDEO_OFFER_TEXTS = [
-    "🎬 О, кружочек! Могу вытащить текст из video, если лень смотреть.",
+    "🎬 О, кружочек! Могу вытащить текст из видео, если лень смотреть.",
     "📸 Вижу видео-сообщение. Расшифровать, что там говорят?",
     "📹 Кружок! Аура может перевести это в текст.",
     "👁️‍🗨️ Вижу кружок! Нажми на кнопку ниже, и я распишу всё текстом.",
@@ -523,8 +523,7 @@ async def main_group_handler(message: types.Message):
             top_list.sort(key=lambda x: x[1], reverse=True)
             report = "🏆 <b>Топ богачей Ауры:</b>\n\n"
             for i, (name, bal, u_id) in enumerate(top_list[:10], 1):
-                safe_name = name.replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;")
-                link = f'<a href="tg://user?id={u_id}">{safe_name}</a>'
+                link = f'<a href="tg://user?id={u_id}">{name}</a>'
                 report += f"{i}. {link} — <b>{bal}</b> 💎\n"
             await message.answer(report)
 
@@ -759,8 +758,7 @@ async def main_group_handler(message: types.Message):
             stats.sort(key=lambda x: x[1], reverse=True)
             report = f"📊 <b>Статистика ({period_name}):</b>\n"
             for i, (name, cnt, u_id, bal) in enumerate(stats[:10], 1):
-                safe_name = name.replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;")
-                link = f'<a href="tg://user?id={u_id}">{safe_name}</a>'
+                link = f'<a href="tg://user?id={u_id}">{name}</a>'
                 status_short = get_status(bal).split(' (')[0]
                 report += f"{i}. {link} — <b>{cnt}</b> [{status_short}]\n"
             await message.answer(report)

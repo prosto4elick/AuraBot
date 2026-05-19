@@ -740,7 +740,7 @@ async def main_group_handler(message: types.Message):
                 if os.path.exists(ogg_p): os.remove(ogg_p)
                 if os.path.exists(wav_p): os.remove(wav_p)
 
-        # --- НАЧАЛО ФИЧИ АУРА ВИКИ ---
+                # --- НАЧАЛО ФИЧИ АУРА ВИКИ ---
         elif msg_text.startswith("аура вики"):
             query = message.text[9:].strip()
             if not query:
@@ -749,12 +749,16 @@ async def main_group_handler(message: types.Message):
 
             wait_wiki_msg = await message.reply("🔍 Аура ищет в Википедии...")
             encoded_query = urllib.parse.quote(query)
-            # Запрос к API Википедии для получения краткой выжимки статьи
             wiki_url = f"https://ru.wikipedia.org/api/rest_v1/page/summary/{encoded_query}"
+            
+            # Добавляем User-Agent, чтобы Википедия не блокировала запросы от Render
+            headers = {
+                "User-Agent": "AuraTelegramBot/1.0 (https://t.me/aurabotn_bot; prosto4elick@gmail.com)"
+            }
             
             try:
                 async with aiohttp.ClientSession() as session:
-                    async with session.get(wiki_url, timeout=7) as resp:
+                    async with session.get(wiki_url, headers=headers, timeout=7) as resp:
                         if resp.status == 200:
                             data = await resp.json()
                             title = data.get("title", query)
@@ -773,7 +777,7 @@ async def main_group_handler(message: types.Message):
                         elif resp.status == 404:
                             await wait_wiki_msg.edit_text("❌ Аура ничего не нашла по этому запросу. Проверь правильность слова.")
                         else:
-                            await wait_wiki_msg.edit_text("🛰 Ошибка связи с Википедией.")
+                            await wait_wiki_msg.edit_text(f"🛰 Ошибка связи с Википедией. Код ответа: {resp.status}")
             except Exception as wiki_err:
                 print(f"Ошибка Википедии: {wiki_err}")
                 await wait_wiki_msg.edit_text("❌ Не удалось обработать запрос к Википедии.")

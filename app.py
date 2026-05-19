@@ -523,8 +523,7 @@ async def main_group_handler(message: types.Message):
             top_list.sort(key=lambda x: x[1], reverse=True)
             report = "🏆 <b>Топ богачей Ауры:</b>\n\n"
             for i, (name, bal, u_id) in enumerate(top_list[:10], 1):
-                link = f'<a href="tg://user?id={u_id}">{name}</a>'
-                report += f"{i}. {link} — <b>{bal}</b> 💎\n"
+                report += f"{i}. <b>{name}</b> — <b>{bal}</b> 💎\n"
             await message.answer(report)
 
         elif msg_text.startswith("аура перевод"):

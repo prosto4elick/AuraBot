@@ -848,4 +848,75 @@ async def main_group_handler(message: types.Message):
                 if repeated: await message.reply(f"{random.choice(REPEAT_PHRASES)}<b>{repeated}</b>")
                 else:
                     options = content.split(" или "); res = random.choice(options).strip()
-                    save_answer(message.chat.id, content, res); await message.reply(f
+                    save_answer(message.chat.id, content, res); await message.reply(f"⚖️ Мой выбор: <b>{res}</b>")
+            else: await message.reply("Разделяй варианты словом <b>или</b>")
+        
+        elif "удач" in msg_text:
+            luck = f"{random.randint(0, 100)}%"; await message.reply(f"🍀 Удача сегодня: <b>{luck}</b>")
+        
+        elif msg_text.startswith("аура аура"):
+            target = message.text[9:].strip()
+            uid_int = int(uid)
+
+            if not target:
+                if uid_int in AURA_COOLDOWN:
+                    passed = now - AURA_COOLDOWN[uid_int]
+                    if passed < 10:
+                        remaining = int(10 - passed)
+                        try: await message.reply(f"⏳ Ты уже запрашивал ауру! Подожди еще <b>{remaining} сек.</b>")
+                        except: pass
+                        return
+
+                AURA_COOLDOWN[uid_int] = now
+                res = random.choice(AURA_VALUES)
+                wait_msg = await message.reply(f"🔮 Анализирую твою ауру... Подожди 10 сек.")
+                asyncio.create_task(run_aura_analysis_static(wait_msg, res))
+            
+            elif target.lower() in ["@aurabotn_bot", "ауры", "аура", "aura"]:
+                res = random.choice(SELF_AURA_VALUES)
+                await message.reply(f"💎 Моя аура: <b>{res}</b>")
+            else:
+                res = random.choice(AURA_VALUES)
+                await message.reply(f"💎 Аура <b>{target}</b>: <b>{res}</b>")
+        
+        elif "фраз" in msg_text: await message.reply(f"💬 <b>{random.choice(AURA_QUOTES)}</b>")
+        
+        elif "число" in msg_text:
+            try:
+                parts = msg_text.split(); n1, n2 = int(parts[2]), int(parts[3])
+                await message.reply(f"🔢 Число: <b>{random.randint(min(n1, n2), max(n1, n2))}</b>")
+            except: await message.reply("Пиши: <code>Аура число 1 100</code>")
+        
+        elif "таймер" in msg_text:
+            try:
+                sec = int(msg_text.split()[2])
+                if sec > 300: 
+                    await message.reply("Максимум 300 секунд!")
+                    return
+                
+                msg = await message.reply(f"⏳ Таймер запущен: <b>{sec} сек.</b>")
+                asyncio.create_task(run_independent_timer(msg, sec, message.from_user.mention_html()))
+            except: 
+                await message.reply("Пиши: <code>Аура таймер [время в сек]</code>")
+
+        elif "кости пара" in msg_text: await message.reply(f"🎲 Выпало: <b>{random.randint(1, 6)}</b> и <b>{random.randint(1, 6)}</b>")
+        elif "кости" in msg_text: await message.reply(f"🎲 Число: <b>{random.randint(1, 6)}</b>")
+        return
+
+@dp.message(is_private_chat, is_allowed_user, F.text.startswith("/msg "))
+async def aura_anon_message(message: types.Message):
+    text = message.text.replace("/msg ", "", 1).strip()
+    if not text: return
+    for g_id in ALLOWED_GROUPS:
+        try: await bot.send_message(chat_id=g_id, text=f"💌 <b>Анонимно:</b>\n\n{text}")
+        except: continue
+    await message.reply("✅ Отправлено!")
+
+async def main():
+    if not TOKEN: return
+    asyncio.create_task(start_uptime_server())
+    await bot.delete_webhook(drop_pending_updates=True)
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())

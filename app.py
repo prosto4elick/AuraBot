@@ -77,12 +77,19 @@ def load_stats():
                 "times": json.loads(row['times']) if row.get('times') else []
             }
             
-            # Загружаем настройки уведомлений (если колонки нет или она пустая — по умолчанию True)
+            # Загружаем настройки уведомлений (если сохранен JSON — парсим, иначе создаем дефолт)
             notify_val = row.get('notify', 'True')
-            if notify_val in [True, 'True', '1', 1]:
-                settings[uid] = {"notify": True}
-            else:
-                settings[uid] = {"notify": False}
+            try:
+                parsed_notify = json.loads(notify_val)
+                if isinstance(parsed_notify, dict):
+                    settings[uid] = parsed_notify
+                else:
+                    settings[uid] = {"notify_tr": parsed_notify, "notify_fi": parsed_notify, "notify": parsed_notify}
+            except:
+                if notify_val in [True, 'True', '1', 1]:
+                    settings[uid] = {"notify_tr": True, "notify_fi": True, "notify": True}
+                else:
+                    settings[uid] = {"notify_tr": False, "notify_fi": False, "notify": False}
                 
         return stats, settings
     except Exception as e:
@@ -97,15 +104,15 @@ def save_stats(stats_data, settings_data):
         rows = [["user_id", "name", "balance", "last_farm", "times", "notify"]]
         
         for uid, data in stats_data.items():
-            # Получаем статус уведомлений для текущего пользователя из словаря настроек
-            is_notify = settings_data.get(uid, {}).get("notify", True)
+            # Сохраняем весь словарь настроек в виде JSON строки для гибкости
+            u_settings = settings_data.get(uid, {"notify_tr": True, "notify_fi": True, "notify": True})
             rows.append([
                 str(uid), 
                 str(data['name']), 
                 int(data['balance']), 
                 float(data['last_farm']), 
                 json.dumps(data['times']),
-                str(is_notify)
+                json.dumps(u_settings)
             ])
         
         sheet.clear()
@@ -213,6 +220,15 @@ FINE_AURA_ANSWERS = [
     "Невозможно забрать деньги у того, кто их печатает."
 ]
 
+AURA_TRANSFER_PHRASES = [
+    "Зачем давать деньги тому, кто их производит?",
+    "Ого какая щедрость!",
+    "Инвестиция в будущее? Одобряю, твоя аура растёт! 📈",
+    "Казна Ауры пополнилась. Бурмалдим по-крупному! 💎",
+    "Хм, взятка высшим силам? Принято, теперь твоя аура пульсирует синим.",
+    "Эти 💎 пойдут на сведение новых треков и чистейший мёд по телу."
+]
+
 # --- ФИЛЬТРЫ ---
 is_allowed_user = F.from_user.id.in_(ALLOWED_USERS)
 is_allowed_group = F.chat.id.in_(ALLOWED_GROUPS)
@@ -242,6 +258,7 @@ HELP_TEXT = (
     "⏳ <code>Аура таймер [сек]</code>\n"
     "💎 <code>Аура аура [текст]</code> - узнать ауру\n"
     "📢 <code>Аура сбор</code> - общий сбор\n"
+    "📢 <code>Настройки уведомлений настраиваются кнопками из уведомлений в ЛС</code>\n"
     "📜 <code>Аура команды</code> - меню\n\n"
     "📩 <b>Личные сообщения:</b>\n"
     "🔐 <code>/msg [текст]</code> - анонимка в чат"
@@ -364,26 +381,39 @@ async def cb_transcribe_voice(callback: types.CallbackQuery):
         if os.path.exists(ogg_p): os.remove(ogg_p)
         if os.path.exists(wav_p): os.remove(wav_p)
 
-@dp.callback_query(F.data.startswith("toggle_notify_"))
+@dp.callback_query(F.data.startswith("toggle_notify_") | F.data.startswith("toggle_nt_"))
 async def cb_toggle_notify(callback: types.CallbackQuery):
     u_id = str(callback.from_user.id)
     if u_id not in USER_SETTINGS:
-        USER_SETTINGS[u_id] = {"notify": True}
+        USER_SETTINGS[u_id] = {"notify_tr": True, "notify_fi": True, "notify": True}
     
-    current_status = USER_SETTINGS[u_id].get("notify", True)
-    new_status = not current_status
-    USER_SETTINGS[u_id]["notify"] = new_status
+    if "notify_tr" not in USER_SETTINGS[u_id]: USER_SETTINGS[u_id]["notify_tr"] = USER_SETTINGS[u_id].get("notify", True)
+    if "notify_fi" not in USER_SETTINGS[u_id]: USER_SETTINGS[u_id]["notify_fi"] = USER_SETTINGS[u_id].get("notify", True)
     
-    status_text = "🔔 Включены" if new_status else "🔕 Отключены"
-    btn_text = "🔕 Отключить уведомления" if new_status else "🔔 Включить уведомления"
+    if callback.data.startswith("toggle_nt_tr_"):
+        USER_SETTINGS[u_id]["notify_tr"] = not USER_SETTINGS[u_id]["notify_tr"]
+    elif callback.data.startswith("toggle_nt_fi_"):
+        USER_SETTINGS[u_id]["notify_fi"] = not USER_SETTINGS[u_id]["notify_fi"]
+    else:
+        status = not USER_SETTINGS[u_id].get("notify", True)
+        USER_SETTINGS[u_id]["notify_tr"] = status
+        USER_SETTINGS[u_id]["notify_fi"] = status
+        
+    USER_SETTINGS[u_id]["notify"] = USER_SETTINGS[u_id]["notify_tr"] or USER_SETTINGS[u_id]["notify_fi"]
     
-    kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=btn_text, callback_data=f"toggle_notify_{u_id}")]])
+    tr_status = "🔔 Включены" if USER_SETTINGS[u_id]["notify_tr"] else "🔕 Отключены"
+    fi_status = "🔔 Включены" if USER_SETTINGS[u_id]["notify_fi"] else "🔕 Отключены"
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"Переводы: {'🔕 Отключить' if USER_SETTINGS[u_id]['notify_tr'] else '🔔 Включить'}", callback_data=f"toggle_nt_tr_{u_id}")],
+        [InlineKeyboardButton(text=f"Штрафы: {'🔕 Отключить' if USER_SETTINGS[u_id]['notify_fi'] else '🔔 Включить'}", callback_data=f"toggle_nt_fi_{u_id}")]
+    ])
     
     await callback.message.edit_text(
-        f"⚙️ <b>Настройки уведомлений изменена!</b>\n\nТекущий статус: <b>{status_text}</b>\nПри переводах вам будет приходить/не приходить отчет в ЛС.",
+        f"⚙️ <b>Настройки уведомлений изменены!</b>\n\nУведомления о переводах: <b>{tr_status}</b>\nУведомления о штрафах: <b>{fi_status}</b>\n\nПри операциях вам будут приходить отчеты в ЛС в соответствии с выбором.",
         reply_markup=kb
     )
-    await callback.answer(f"Уведомления {'включены' if new_status else 'отключены'}")
+    await callback.answer("Настройки обновлены")
     # Сохраняем новые настройки в таблицу сразу после переключения
     asyncio.create_task(asyncio.to_thread(save_stats, USER_MESSAGES, USER_SETTINGS))
 
@@ -491,6 +521,22 @@ async def main_group_handler(message: types.Message):
             await message.reply(response_text)
             asyncio.create_task(asyncio.to_thread(save_stats, USER_MESSAGES, USER_SETTINGS))
 
+            # ОТПРАВКА УВЕДОМЛЕНИЯ О МАТ-ШТРАФЕ В ЛС
+            is_notify_fine_enabled = USER_SETTINGS.get(uid, {}).get("notify_fi", True)
+            if is_notify_fine_enabled:
+                try:
+                    kb_ls_fi = InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(text="🔕 Отключить уведомления о штрафах", callback_data=f"toggle_nt_fi_{uid}")],
+                        [InlineKeyboardButton(text="⚙️ Все настройки", callback_data=f"toggle_notify_{uid}")]
+                    ])
+                    await bot.send_message(
+                        chat_id=int(uid),
+                        text=f"🚫 Автоматический штраф за маты: списано <b>{actual_fine}</b> 💎 в чате {message.chat.title or 'группы'}!",
+                        reply_markup=kb_ls_fi
+                    )
+                except Exception as e:
+                    print(f"Не удалось отправить уведомление о штрафе в ЛС пользователю {uid}: {e}")
+
     tt_match = re.search(r'http(?:s)?://(?:www\.)?v(?:t|m)\.tiktok\.com/\S+|http(?:s)?://(?:www\.)?tiktok\.com/\S+', message.text)
     if tt_match and not msg_text.startswith("аура"):
         url = tt_match.group(0)
@@ -523,7 +569,7 @@ async def main_group_handler(message: types.Message):
         elif msg_text == "аура топ":
             top_list = []
             for u_id, data in USER_MESSAGES.items():
-                if data.get("balance", 0) > 0:
+                if u_id != bot_id:  # Теперь в топе остаются все, даже те у кого баланс ушел в минус
                     top_list.append((data["name"], data["balance"], u_id))
             if not top_list:
                 await message.reply("Список богачей пока пуст.")
@@ -580,14 +626,22 @@ async def main_group_handler(message: types.Message):
                 f"🧾 Комиссия {fee_label}: <b>{fee}</b> 💎\n"
                 f"💰 <b>Дошло до получателя: {final_amount}</b> 💎"
             )
+            
+            # Пасхалки при переводе самой Ауре
+            if recipient_id == bot_id:
+                report_msg = f"✨ <b>{random.choice(AURA_TRANSFER_PHRASES)}</b>\n\n" + report_msg
+
             await message.reply(report_msg)
             asyncio.create_task(asyncio.to_thread(save_stats, USER_MESSAGES, USER_SETTINGS))
 
-            # ОТПРАВКА УВЕДОМЛЕНИЯ В ЛС ПОЛУЧАТЕЛЮ
-            is_notify_enabled = USER_SETTINGS.get(recipient_id, {}).get("notify", True)
+            # ОТПРАВКА УВЕДОМЛЕНИЯ В ЛС ПОЛУЧАТЕЛЮ О ПЕРЕВОДЕ
+            is_notify_enabled = USER_SETTINGS.get(recipient_id, {}).get("notify_tr", True)
             if is_notify_enabled:
                 try:
-                    kb_ls = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔕 Отключить уведомления", callback_data=f"toggle_notify_{recipient_id}")]])
+                    kb_ls = InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(text="🔕 Отключить уведомления о переводах", callback_data=f"toggle_nt_tr_{recipient_id}")],
+                        [InlineKeyboardButton(text="⚙️ Все настройки", callback_data=f"toggle_notify_{recipient_id}")]
+                    ])
                     sender_mention = f"<a href='tg://user?id={uid}'>{uname}</a>"
                     await bot.send_message(
                         chat_id=int(recipient_id),
@@ -644,6 +698,22 @@ async def main_group_handler(message: types.Message):
                 await message.reply(f" Админ-штраф! С баланса <a href='tg://user?id={t_uid}'>{target_user.first_name}</a> списано <b>{actual_fine}</b> 💎. Деньги ушли в казну.")
             
             asyncio.create_task(asyncio.to_thread(save_stats, USER_MESSAGES, USER_SETTINGS))
+
+            # ОТПРАВКА УВЕДОМЛЕНИЯ О ШТРАФЕ В ЛС ПОЛЬЗОВАТЕЛЮ
+            is_notify_fine_enabled = USER_SETTINGS.get(t_uid, {}).get("notify_fi", True)
+            if is_notify_fine_enabled:
+                try:
+                    kb_ls_fi = InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(text="🔕 Отключить уведомления о штрафах", callback_data=f"toggle_nt_fi_{t_uid}")],
+                        [InlineKeyboardButton(text="⚙️ Все настройки", callback_data=f"toggle_notify_{t_uid}")]
+                    ])
+                    await bot.send_message(
+                        chat_id=int(t_uid),
+                        text=f"🚫 Вы были оштрафованы админом на <b>{actual_fine}</b> 💎 в чате {message.chat.title or 'группы'}!",
+                        reply_markup=kb_ls_fi
+                    )
+                except Exception as e:
+                    print(f"Не удалось отправить уведомление о штрафе в ЛС пользователю {t_uid}: {e}")
 
         elif msg_text.startswith("аура ставка"):
             uid_int = int(uid)
@@ -747,7 +817,7 @@ async def main_group_handler(message: types.Message):
                 if os.path.exists(ogg_p): os.remove(ogg_p)
                 if os.path.exists(wav_p): os.remove(wav_p)
 
-                # --- НАЧАЛО ФИЧИ АУРА ВИКИ ---
+        # --- НАЧАЛО ФИЧИ АУРА ВИКИ ---
         elif msg_text.startswith("аура вики"):
             query = message.text[9:].strip()
             if not query:

@@ -469,15 +469,18 @@ async def main_group_handler(message: types.Message):
         if MAT_COUNTERS[uid] >= MAT_THRESHOLD:
             total_mats = MAT_COUNTERS[uid]
             total_fine = total_mats * 5
-            current_bal = USER_MESSAGES[uid].get("balance", 0)
-            actual_fine = min(current_bal, total_fine)
+            
+            # РЕШЕНО: Убран min(), теперь штраф за маты полностью уводит баланс в минус
+            actual_fine = total_fine
             
             USER_MESSAGES[uid]["balance"] -= actual_fine
             USER_MESSAGES[bot_id]["balance"] += actual_fine
             
             MAT_COUNTERS[uid] = 0
             
-            shame_phrase = random.choice(SHAME_VARIATIONS)
+            # РЕШЕНО: Сборный пул фраз для ультра-рандома за маты
+            ALL_PHRASES = SHAME_VARIATIONS + REPEAT_PHRASES + LOSE_TROLL_PHRASES
+            shame_phrase = random.choice(ALL_PHRASES)
             response_text = (
                 f"{shame_phrase}\n"
                 f"Накопилось матов: <b>{total_mats}</b> шт.\n"
@@ -594,7 +597,7 @@ async def main_group_handler(message: types.Message):
 
         elif msg_text.startswith("аура штраф"):
             if not is_group:
-                await message.reply("Штрафы работают только внутри групп!")
+                await message.reply("Шрафы работают только внутри групп!")
                 return
             member = await message.bot.get_chat_member(message.chat.id, message.from_user.id)
             if member.status not in ["administrator", "creator"]:
@@ -625,14 +628,16 @@ async def main_group_handler(message: types.Message):
             if t_uid not in USER_MESSAGES:
                 USER_MESSAGES[t_uid] = {"name": target_user.first_name, "times": [], "balance": 0, "last_farm": 0}
             
-            current_target_bal = USER_MESSAGES[t_uid].get("balance", 0)
-            actual_fine = min(current_target_bal, amount)
+            # РЕШЕНО: Убран min(), админ-штраф теперь жестко списывает сумму, уводя баланс в минус
+            actual_fine = amount
             
             USER_MESSAGES[t_uid]["balance"] -= actual_fine
             USER_MESSAGES[bot_id]["balance"] += actual_fine
             
+            # РЕШЕНО: Для ответов админ-штрафа тоже сделан рандом из всех пулов фраз
+            ALL_ADMIN_PHRASES = SELF_FINE_ANSWERS + SHAME_VARIATIONS + LOSE_TROLL_PHRASES
             if t_uid == uid:
-                await message.reply(f" {random.choice(SELF_FINE_ANSWERS)}\nСписано <b>{actual_fine}</b> 💎")
+                await message.reply(f" {random.choice(ALL_ADMIN_PHRASES)}\nСписано <b>{actual_fine}</b> 💎")
             else:
                 await message.reply(f" Админ-штраф! С баланса <a href='tg://user?id={t_uid}'>{target_user.first_name}</a> списано <b>{actual_fine}</b> 💎. Деньги ушли в казну.")
             
@@ -815,7 +820,7 @@ async def main_group_handler(message: types.Message):
             mentions = ""
             for target_id in ALLOWED_USERS:
                 try:
-                    member = await message.bot.get_chat_member(message.chat.id, target_id)
+                    member = await member.bot.get_chat_member(message.chat.id, target_id)
                     if member.status not in ["left", "kicked"]:
                         mentions += f'<a href="tg://user?id={target_id}">\u2063</a>'
                 except: continue

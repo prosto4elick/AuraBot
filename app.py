@@ -457,7 +457,9 @@ async def main_group_handler(message: types.Message):
     bad_pattern = r"(?i)\b(?:а|о|вы|по|на|при|у|ни)?(?:хуй|пизд|ебла|сук|бля|гандон|даун|шлюх|уеб|чмо|хуе|хуя)[а-яё]*"
     matches = re.findall(bad_pattern, msg_text)
     
-    if matches and not msg_text.startswith("аура") and is_group:
+    # ИСПРАВЛЕНО: Добавлена проверка, чтобы бот не триггерил маты на пересланные сообщения, ответы на ставки, либо системные выводы игр
+    is_game_msg = any(phrase in msg_text for phrase in LOSE_TROLL_PHRASES) or "изменение:" in msg_text or "баланс:" in msg_text
+    if matches and not msg_text.startswith("аура") and is_group and not message.reply_to_message and not is_game_msg:
         mats_in_msg = len(matches)
         
         if uid not in MAT_COUNTERS:
@@ -478,8 +480,8 @@ async def main_group_handler(message: types.Message):
             
             MAT_COUNTERS[uid] = 0
             
-            # РЕШЕНО: Сборный пул фраз для ультра-рандома за маты
-            ALL_PHRASES = SHAME_VARIATIONS + REPEAT_PHRASES + LOSE_TROLL_PHRASES
+            # ИСПРАВЛЕНО: Очищен пул фраз, убраны LOSE_TROLL_PHRASES и REPEAT_PHRASES, чтобы фразы были ТОЛЬКО про маты
+            ALL_PHRASES = SHAME_VARIATIONS
             shame_phrase = random.choice(ALL_PHRASES)
             response_text = (
                 f"{shame_phrase}\n"
@@ -634,8 +636,8 @@ async def main_group_handler(message: types.Message):
             USER_MESSAGES[t_uid]["balance"] -= actual_fine
             USER_MESSAGES[bot_id]["balance"] += actual_fine
             
-            # РЕШЕНО: Для ответов админ-штрафа тоже сделан рандом из всех пулов фраз
-            ALL_ADMIN_PHRASES = SELF_FINE_ANSWERS + SHAME_VARIATIONS + LOSE_TROLL_PHRASES
+            # ИСПРАВЛЕНО: Для админ-штрафов оставлены только адекватные пулы без казино-троллинга
+            ALL_ADMIN_PHRASES = SELF_FINE_ANSWERS + SHAME_VARIATIONS
             if t_uid == uid:
                 await message.reply(f" {random.choice(ALL_ADMIN_PHRASES)}\nСписано <b>{actual_fine}</b> 💎")
             else:
